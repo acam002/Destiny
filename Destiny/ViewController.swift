@@ -7,6 +7,7 @@
 //
 
 import UIKit
+import Combine
 
 // This file was generated from JSON Schema using quicktype, do not modify it directly.
 // To parse the JSON, add this file to your project and do:
@@ -54,45 +55,44 @@ struct Player: Codable {
     }
 }
 
+enum PlayerError: Error {
+    case error
+}
+
 
 class ViewController: UIViewController {
-    private var player: [Player] = [] {
+    
+    //private var publisher: AnyPublisher<SomeObject, Error>()
+    
+    private var player: PlayerData? {
         didSet {
-            print(player)
+            print("!!!!", player)
         }
     }
     
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .white
-        
-        makeRequest { response in
-            self.player = response
-            //print(self.player)
+        fetchCombine()
+            .sink(receiveCompletion: { completion in
+                print(">>>>", completion)
+            }) { (playerData) in
+                self.player = playerData
+                let x = playerData.players.first?.crossSaveOverride
         }
     }
     
-    func makeRequest(completion: @escaping (([Player]) -> Void)) {
+    func fetchCombine() -> AnyPublisher<PlayerData, PlayerError> {
         var request = URLRequest(url: URL(string: "https://www.bungie.net/Platform/Destiny2/SearchDestinyPlayer/-1/Albyrt/")!)
         request.addValue("2b0ee5d41d674109b59e7d0ecf4f9aa1", forHTTPHeaderField: "X-API-KEY")
-        URLSession.shared.dataTask(with: request) { (data, response, error) in
-            guard let data = data
-                else {
-                    // Handle error
-                    completion([])
-                    return
-            }
-            do {
-                let playerData = try JSONDecoder().decode(PlayerData.self, from: data)
-                let players = playerData.players
-                
-                completion(players) // pass closureResponse
-                
-            } catch let error{
-                completion([])
-                print(error)
-            }
-        }.resume()
+        return URLSession.shared.dataTaskPublisher(for: request)
+            .map { $0.data }
+            .decode(type: PlayerData.self, decoder: JSONDecoder())
+            .mapError({ (error) -> PlayerError in
+                PlayerError.error
+            })
+            .receive(on: RunLoop.main)
+            .eraseToAnyPublisher()
     }
 }
 
